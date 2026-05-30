@@ -1,6 +1,6 @@
-var ADMIN_USER = '{{ADMIN_USER}}';
+﻿var ADMIN_USER = 'Sard';
 var ADMIN_PASS = '5555';
-var FALLBACK_IMAGE = "{{FALLBACK_IMAGE}}";
+var FALLBACK_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect fill='%234a2c17' width='400' height='400'/%3E%3Ctext fill='%23d4a574' font-family='Arial' font-size='40' x='50%25' y='45%25' text-anchor='middle'%3E🍫%3C/text%3E%3Ctext fill='%23d4a574' font-family='Arial' font-size='20' x='50%25' y='60%25' text-anchor='middle'%3ESard Chocolate%3C/text%3E%3C/svg%3E";
 
 var products = [];
 var discounts = [];
@@ -18,7 +18,7 @@ var adminReady = {
 };
 
 document.addEventListener('DOMContentLoaded', function () {
-    if (sessionStorage.getItem('{{PROJECT_NAME}}_admin') === 'true') {
+    if (sessionStorage.getItem('sardchocolate_admin') === 'true') {
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('adminPanel').style.display = 'block';
         initializeAdmin();
@@ -57,7 +57,7 @@ function handleLogin(event) {
     if (user === ADMIN_USER && pass === ADMIN_PASS) {
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('adminPanel').style.display = 'block';
-        sessionStorage.setItem('{{PROJECT_NAME}}_admin', 'true');
+        sessionStorage.setItem('sardchocolate_admin', 'true');
         initializeAdmin();
     } else {
         document.getElementById('loginError').textContent = 'اسم المستخدم أو كلمة المرور غير صحيحة';
@@ -65,7 +65,7 @@ function handleLogin(event) {
 }
 
 function logout() {
-    sessionStorage.removeItem('{{PROJECT_NAME}}_admin');
+    sessionStorage.removeItem('sardchocolate_admin');
     unsubscribers.forEach(function (unsubscribe) { if (typeof unsubscribe === 'function') unsubscribe(); });
     location.reload();
 }

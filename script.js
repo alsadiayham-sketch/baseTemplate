@@ -1,16 +1,18 @@
-var FALLBACK_IMAGE = "{{FALLBACK_IMAGE}}";
+var FALLBACK_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'%3E%3Crect fill='%234a2c17' width='400' height='400'/%3E%3Ctext fill='%23d4a574' font-family='Arial' font-size='40' x='50%25' y='45%25' text-anchor='middle'%3E🍫%3C/text%3E%3Ctext fill='%23d4a574' font-family='Arial' font-size='20' x='50%25' y='60%25' text-anchor='middle'%3ESard Chocolate%3C/text%3E%3C/svg%3E";
 
 var products = [];
 var discounts = [];
 var siteSettings = normalizeSettings(DEFAULT_SITE_SETTINGS);
 var currentFilter = 'all';
-var cart = normalizeCartItems(JSON.parse(localStorage.getItem('{{PROJECT_NAME}}_cart') || '[]'), normalizeProducts(DEFAULT_PRODUCTS));
-var deliveryMethod = localStorage.getItem('{{PROJECT_NAME}}_delivery_method') || 'delivery';
+var cart = normalizeCartItems(JSON.parse(localStorage.getItem('sardchocolate_cart') || '[]'), normalizeProducts(DEFAULT_PRODUCTS));
+var deliveryMethod = localStorage.getItem('sardchocolate_delivery_method') || 'delivery';
 var currentPDPProduct = null;
 var currentPDPSizeIdx = 0;
 var pdpQty = 1;
 var usedFallbackData = false;
 var unsubscribers = [];
+var packagingBuilderSets = [];
+var editingCustomPackageId = '';
 
 var storeLoadState = {
     products: false,
@@ -23,6 +25,8 @@ document.addEventListener('DOMContentLoaded', function () {
     renderBrands();
     setupSearch('navSearchInput', 'navSearchDropdown');
     setupSearch('productsSearchInput', 'productsSearchDropdown');
+    initializePackagingBuilder();
+    initializeOrderTracking();
     updateCartBadge();
     updateCheckoutLink(cart.length ? updateCartTotal() : 0);
     setDeliveryMethod(deliveryMethod);
@@ -406,6 +410,342 @@ window.addEventListener('scroll', function () {
     navbar.style.boxShadow = window.scrollY > 50 ? '0 4px 20px rgba(0,0,0,0.1)' : '0 2px 10px rgba(0,0,0,0.05)';
 });
 
+
+function createDefaultPackagingSet() {
+    return {
+        chocolateType: 'mixed',
+        filling: 'plain',
+        qty: 1
+    };
+}
+
+function getPackagingTypeLabel(value) {
+    switch (value) {
+        case 'dark': return 'داكن';
+        case 'milk': return 'حليب';
+        case 'white': return 'أبيض';
+        default: return 'مشكل';
+    }
+}
+
+function getPackagingFillingLabel(value) {
+    switch (value) {
+        case 'plain': return 'سادا / بدون حشوة';
+        case 'hazelnut': return 'بندق';
+        case 'caramel': return 'كراميل';
+        case 'pistachio': return 'فستق';
+        case 'coconut': return 'جوز الهند';
+        case 'strawberry': return 'فراولة';
+        case 'orange': return 'برتقال';
+        default: return 'سادا / بدون حشوة';
+    }
+}
+
+function getWrapperColorLabel(value) {
+    switch (value) {
+        case 'gold': return 'ذهبي';
+        case 'silver': return 'فضي';
+        case 'red': return 'أحمر';
+        case 'pink': return 'زهري';
+        case 'purple': return 'بنفسجي';
+        case 'black': return 'أسود';
+        case 'white': return 'أبيض';
+        case 'blue': return 'أزرق';
+        default: return 'ذهبي';
+    }
+}
+
+function buildPackagingOptions(options, selectedValue) {
+    return options.map(function (option) {
+        return '<option value="' + option.value + '"' + (selectedValue === option.value ? ' selected' : '') + '>' + option.label + '</option>';
+    }).join('');
+}
+
+function renderPackagingSets() {
+    var container = document.getElementById('packagingSetsContainer');
+    if (!container) return;
+    var typeOptions = [
+        { value: 'dark', label: 'داكن' },
+        { value: 'milk', label: 'حليب' },
+        { value: 'white', label: 'أبيض' },
+        { value: 'mixed', label: 'مشكل' }
+    ];
+    var fillingOptions = [
+        { value: 'plain', label: 'سادا / بدون حشوة' },
+        { value: 'hazelnut', label: 'بندق' },
+        { value: 'caramel', label: 'كراميل' },
+        { value: 'pistachio', label: 'فستق' },
+        { value: 'coconut', label: 'جوز الهند' },
+        { value: 'strawberry', label: 'فراولة' },
+        { value: 'orange', label: 'برتقال' }
+    ];
+    container.innerHTML = packagingBuilderSets.map(function (setItem, index) {
+        return '<div class="builder-set">'
+            + '<div class="builder-set-head"><h5>تشكيلة ' + (index + 1) + '</h5>'
+            + (packagingBuilderSets.length > 1 ? '<button type="button" class="builder-remove-set" onclick="removePackagingSet(' + index + ')">حذف</button>' : '')
+            + '</div>'
+            + '<div class="builder-set-grid">'
+            + '<div class="builder-field"><label>نوع الشوكولاتة</label><select onchange="updatePackagingSetField(' + index + ', \'chocolateType\', this.value)">' + buildPackagingOptions(typeOptions, setItem.chocolateType) + '</select></div>'
+            + '<div class="builder-field"><label>الحشوة</label><select onchange="updatePackagingSetField(' + index + ', \'filling\', this.value)">' + buildPackagingOptions(fillingOptions, setItem.filling) + '</select></div>'
+            + '<div class="builder-field"><label>الكمية</label><input type="number" min="1" value="' + (parseInt(setItem.qty, 10) || 1) + '" onchange="updatePackagingSetField(' + index + ', \'qty\', this.value)"></div>'
+            + '</div></div>';
+    }).join('');
+}
+
+function updatePackagingSetField(index, field, value) {
+    if (!packagingBuilderSets[index]) return;
+    if (field === 'qty') packagingBuilderSets[index][field] = Math.max(1, parseInt(value, 10) || 1);
+    else packagingBuilderSets[index][field] = value;
+}
+
+function addPackagingSet(prefill) {
+    packagingBuilderSets.push(normalizeCustomPackageSet(prefill || createDefaultPackagingSet()));
+    renderPackagingSets();
+}
+
+function removePackagingSet(index) {
+    if (packagingBuilderSets.length <= 1) packagingBuilderSets = [createDefaultPackagingSet()];
+    else packagingBuilderSets.splice(index, 1);
+    renderPackagingSets();
+}
+
+function togglePackagingDeliveryFields() {
+    var selected = document.querySelector('input[name="packageDelivery"]:checked');
+    var locationField = document.getElementById('packageLocationField');
+    if (locationField) locationField.style.display = selected && selected.value === 'delivery' ? 'flex' : 'none';
+}
+
+function resetPackagingBuilderForm() {
+    editingCustomPackageId = '';
+    packagingBuilderSets = [createDefaultPackagingSet()];
+    var title = document.getElementById('packagingBuilderTitle');
+    var submit = document.getElementById('packagingBuilderSubmit');
+    if (title) title.textContent = 'صممي علبتك المخصصة';
+    if (submit) submit.textContent = 'أضيفي إلى السلة';
+    if (document.getElementById('packageWrapperColor')) document.getElementById('packageWrapperColor').value = 'gold';
+    if (document.getElementById('packageNotes')) document.getElementById('packageNotes').value = '';
+    if (document.getElementById('packageCustomerName')) document.getElementById('packageCustomerName').value = '';
+    if (document.getElementById('packageCustomerPhone')) document.getElementById('packageCustomerPhone').value = '';
+    if (document.getElementById('packageCustomerLocation')) document.getElementById('packageCustomerLocation').value = '';
+    document.querySelectorAll('input[name="packageDelivery"]').forEach(function (input) {
+        input.checked = input.value === 'delivery';
+    });
+    renderPackagingSets();
+    togglePackagingDeliveryFields();
+}
+
+function populatePackagingBuilder(item) {
+    var normalized = normalizeCustomPackageItem(item);
+    editingCustomPackageId = normalized.id;
+    packagingBuilderSets = normalized.sets.map(function (setItem) { return normalizeCustomPackageSet(setItem); });
+    if (document.getElementById('packagingBuilderTitle')) document.getElementById('packagingBuilderTitle').textContent = 'تعديل العلبة المخصصة';
+    if (document.getElementById('packagingBuilderSubmit')) document.getElementById('packagingBuilderSubmit').textContent = 'حفظ التعديلات';
+    renderPackagingSets();
+    document.getElementById('packageWrapperColor').value = normalized.wrapperColor;
+    document.getElementById('packageNotes').value = normalized.notes;
+    document.getElementById('packageCustomerName').value = normalized.customerName;
+    document.getElementById('packageCustomerPhone').value = normalized.customerPhone;
+    document.getElementById('packageCustomerLocation').value = normalized.customerLocation || '';
+    document.querySelectorAll('input[name="packageDelivery"]').forEach(function (input) {
+        input.checked = input.value === normalized.delivery;
+    });
+    togglePackagingDeliveryFields();
+}
+
+function openPackagingBuilder(itemId) {
+    var modal = document.getElementById('packagingBuilderModal');
+    if (!modal) return;
+    if (itemId) {
+        var item = cart.find(function (entry) { return entry.type === 'custom_package' && entry.id === itemId; });
+        if (!item) return;
+        populatePackagingBuilder(item);
+    } else {
+        resetPackagingBuilderForm();
+    }
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closePackagingBuilder(event) {
+    if (event && event.target !== event.currentTarget) return;
+    var modal = document.getElementById('packagingBuilderModal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+    resetPackagingBuilderForm();
+}
+
+function saveCustomPackageFromBuilder() {
+    var selectedDelivery = document.querySelector('input[name="packageDelivery"]:checked');
+    var customerName = (document.getElementById('packageCustomerName').value || '').trim();
+    var customerPhone = (document.getElementById('packageCustomerPhone').value || '').trim();
+    var customerLocation = (document.getElementById('packageCustomerLocation').value || '').trim();
+    if (!customerName || !customerPhone) {
+        alert('الرجاء إدخال الاسم ورقم الهاتف للعلبة المخصصة');
+        return;
+    }
+    if (selectedDelivery && selectedDelivery.value === 'delivery' && !customerLocation) {
+        alert('الرجاء إدخال موقع التوصيل للعلبة المخصصة');
+        return;
+    }
+    var packageItem = normalizeCustomPackageItem({
+        id: editingCustomPackageId || 'pkg_' + Date.now(),
+        sets: packagingBuilderSets,
+        wrapperColor: document.getElementById('packageWrapperColor').value,
+        notes: document.getElementById('packageNotes').value,
+        delivery: selectedDelivery ? selectedDelivery.value : 'delivery',
+        customerName: customerName,
+        customerPhone: customerPhone,
+        customerLocation: customerLocation,
+        qty: 1
+    });
+    var existingIndex = cart.findIndex(function (entry) {
+        return entry.type === 'custom_package' && entry.id === packageItem.id;
+    });
+    if (existingIndex >= 0) cart[existingIndex] = packageItem;
+    else cart.push(packageItem);
+    saveCart();
+    updateCartBadge();
+    updateCheckoutLink(updateCartTotal());
+    renderCart();
+    closePackagingBuilder();
+    alert(existingIndex >= 0 ? 'تم تحديث العلبة المخصصة بنجاح' : 'تمت إضافة العلبة المخصصة إلى السلة');
+}
+
+function editCustomPackage(itemId) {
+    if (document.getElementById('cartSidebar').classList.contains('active')) toggleCart();
+    setTimeout(function () {
+        openPackagingBuilder(itemId);
+    }, 180);
+}
+
+function getCustomPackageSetsHtml(sets) {
+    return (Array.isArray(sets) ? sets : []).map(function (setItem, index) {
+        return '<span class="custom-package-set-line">تشكيلة ' + (index + 1) + ': ' + getPackagingTypeLabel(setItem.chocolateType) + ' • ' + getPackagingFillingLabel(setItem.filling) + ' • الكمية ' + (parseInt(setItem.qty, 10) || 1) + '</span>';
+    }).join('');
+}
+
+function getCustomPackageDeliveryLabel(item) {
+    return item.delivery === 'pickup' ? 'استلام من المصنع' : 'توصيل';
+}
+
+function renderCustomPackageCartItem(item) {
+    var customerParts = ['<span class="custom-package-meta">لون التغليف: ' + getWrapperColorLabel(item.wrapperColor) + '</span>'];
+    customerParts.push('<span class="custom-package-meta">طريقة الاستلام: ' + getCustomPackageDeliveryLabel(item) + '</span>');
+    customerParts.push('<span class="custom-package-meta">الاسم: ' + escapeHtml(item.customerName) + ' • الهاتف: ' + escapeHtml(item.customerPhone) + '</span>');
+    if (item.delivery === 'delivery' && item.customerLocation) customerParts.push('<span class="custom-package-meta">الموقع: ' + escapeHtml(item.customerLocation) + '</span>');
+    if (item.notes) customerParts.push('<span class="custom-package-note">ملاحظات: ' + escapeHtml(item.notes) + '</span>');
+    return '<div class="cart-item custom-package-item">'
+        + '<div class="custom-package-icon">🎁</div>'
+        + '<div class="cart-item-info"><h4>' + getCustomPackageTitle(item) + '</h4>'
+        + '<div class="custom-package-sets">' + getCustomPackageSetsHtml(item.sets) + '</div>'
+        + customerParts.join('')
+        + '<div class="cart-item-price pending-price">السعر يحدد بعد مراجعة الإدارة</div></div>'
+        + '<div class="cart-custom-actions"><button type="button" class="cart-item-edit" onclick="editCustomPackage(\'' + item.id + '\')">تعديل</button><button class="cart-item-remove" onclick="removeFromCart(\'' + item.id + '\', -1)">✕</button></div>'
+        + '</div>';
+}
+
+function getCartKnownTotal() {
+    return cart.reduce(function (sum, item) {
+        if (item.type === 'custom_package') return sum;
+        var product = products.find(function (entry) { return entry.id === item.id; });
+        return product ? sum + getFinalPrice(product, item.sizeIdx, discounts).final * item.qty : sum;
+    }, 0);
+}
+
+function initializePackagingBuilder() {
+    var form = document.getElementById('packagingBuilderForm');
+    if (!form) return;
+    resetPackagingBuilderForm();
+    form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        saveCustomPackageFromBuilder();
+    });
+}
+
+function getOrderStatusLabel(status) {
+    switch (status) {
+        case 'confirmed': return 'تم التأكيد';
+        case 'processing': return 'قيد التجهيز';
+        case 'completed': return 'مكتمل';
+        case 'cancelled': return 'ملغي';
+        default: return 'طلب جديد';
+    }
+}
+
+function renderTrackedOrderItem(item) {
+    if (item.type === 'custom_package') {
+        return '<div class="tracking-order-item">'
+            + '<div class="tracking-order-item-head"><h5>' + getCustomPackageTitle(item) + '</h5><span class="tracking-order-price">السعر يحدد لاحقاً</span></div>'
+            + '<span class="tracking-order-extra">لون التغليف: ' + getWrapperColorLabel(item.wrapperColor) + '</span>'
+            + '<div class="custom-package-sets">' + getCustomPackageSetsHtml(item.sets) + '</div>'
+            + '<span class="tracking-order-extra">طريقة الاستلام: ' + getCustomPackageDeliveryLabel(item) + '</span>'
+            + '<span class="tracking-order-extra">الاسم: ' + escapeHtml(item.customerName || '') + ' • الهاتف: ' + escapeHtml(item.customerPhone || '') + '</span>'
+            + ((item.delivery === 'delivery' && item.customerLocation) ? '<span class="tracking-order-extra">الموقع: ' + escapeHtml(item.customerLocation) + '</span>' : '')
+            + (item.notes ? '<span class="tracking-order-note">ملاحظات: ' + escapeHtml(item.notes) + '</span>' : '')
+            + '</div>';
+    }
+    return '<div class="tracking-order-item">'
+        + '<div class="tracking-order-item-head"><h5>' + escapeHtml(item.name) + '</h5><span class="tracking-order-price">' + formatCurrency(item.lineTotal) + '</span></div>'
+        + '<span class="tracking-order-details">' + escapeHtml(item.brand || '') + ' • ' + escapeHtml(item.sizeLabel || '') + ' • الكمية ' + (parseInt(item.qty, 10) || 1) + '</span>'
+        + '</div>';
+}
+
+function renderTrackedOrder(order) {
+    var result = document.getElementById('orderTrackingResult');
+    if (!result) return;
+    var totalItems = (Array.isArray(order.items) ? order.items : []).reduce(function (sum, item) {
+        return sum + Math.max(1, parseInt(item.qty, 10) || 1);
+    }, 0);
+    var totalText = order.totalDisplay || getTotalDisplayText(order.total, !!order.pricingPending);
+    result.innerHTML = '<div class="tracking-result-card">'
+        + '<div class="tracking-result-head"><div><h4>الطلب ' + escapeHtml(order.id) + '</h4><p>' + formatDateTime(order.date) + '</p></div><span class="tracking-status">' + getOrderStatusLabel(order.status) + '</span></div>'
+        + '<div class="tracking-order-items">' + (order.items || []).map(function (item) { return renderTrackedOrderItem(item); }).join('') + '</div>'
+        + '<div class="tracking-order-summary">'
+        + '<div class="tracking-order-summary-row"><span>عدد المنتجات</span><strong>' + totalItems + '</strong></div>'
+        + '<div class="tracking-order-summary-row"><span>الإجمالي</span><strong>' + totalText + '</strong></div>'
+        + '<div class="tracking-order-summary-row"><span>الحالة</span><strong>' + getOrderStatusLabel(order.status) + '</strong></div>'
+        + '</div></div>';
+}
+
+function trackOrder() {
+    var input = document.getElementById('orderTrackingInput');
+    var result = document.getElementById('orderTrackingResult');
+    if (!input || !result) return;
+    var orderId = (input.value || '').trim();
+    if (!orderId) {
+        result.innerHTML = '<div class="order-tracking-message error">أدخلي رقم الطلب أولاً.</div>';
+        return;
+    }
+    if (!window.db) {
+        result.innerHTML = '<div class="order-tracking-message error">تعذر الاتصال بقاعدة البيانات حالياً.</div>';
+        return;
+    }
+    result.innerHTML = '<div class="order-tracking-message">جاري البحث عن الطلب...</div>';
+    db.collection('orders').doc(orderId).get().then(function (docSnap) {
+        if (!docSnap.exists) {
+            result.innerHTML = '<div class="order-tracking-message error">لم يتم العثور على طلب بهذا الرقم.</div>';
+            return;
+        }
+        var order = docSnap.data() || {};
+        order.id = docSnap.id;
+        renderTrackedOrder(order);
+    }).catch(function () {
+        result.innerHTML = '<div class="order-tracking-message error">تعذر جلب بيانات الطلب حالياً. حاولي مرة أخرى.</div>';
+    });
+}
+
+function initializeOrderTracking() {
+    var input = document.getElementById('orderTrackingInput');
+    if (!input) return;
+    input.addEventListener('keypress', function (event) {
+        if (event.keyCode === 13) {
+            event.preventDefault();
+            trackOrder();
+        }
+    });
+}
+
 function getSelectedCardSizeIndex(productId) {
     var select = document.getElementById('sizeSelect-' + productId);
     return select ? parseInt(select.value || '0', 10) || 0 : 0;
@@ -539,6 +879,7 @@ function renderCart() {
 
     footer.style.display = 'block';
     container.innerHTML = cart.map(function (item) {
+        if (item.type === 'custom_package') return renderCustomPackageCartItem(item);
         var product = products.find(function (entry) { return entry.id === item.id; });
         if (!product) return '';
         var sizeData = getSizeData(product, item.sizeIdx);
@@ -551,7 +892,7 @@ function renderCart() {
 
 function updateCartQty(productId, sizeIdx, delta) {
     var item = cart.find(function (entry) { return entry.id === productId && entry.sizeIdx === sizeIdx; });
-    if (!item) return;
+    if (!item || item.type === 'custom_package') return;
     item.qty += delta;
     if (item.qty < 1) {
         removeFromCart(productId, sizeIdx);
@@ -564,6 +905,7 @@ function updateCartQty(productId, sizeIdx, delta) {
 
 function removeFromCart(productId, sizeIdx) {
     cart = cart.filter(function (entry) {
+        if (entry.type === 'custom_package') return entry.id !== String(productId);
         return !(entry.id === productId && entry.sizeIdx === sizeIdx);
     });
     saveCart();
@@ -579,12 +921,9 @@ function clearCart() {
 }
 
 function updateCartTotal() {
-    var total = cart.reduce(function (sum, item) {
-        var product = products.find(function (entry) { return entry.id === item.id; });
-        return product ? sum + getFinalPrice(product, item.sizeIdx, discounts).final * item.qty : sum;
-    }, 0);
+    var total = getCartKnownTotal();
     var totalEl = document.getElementById('cartTotal');
-    if (totalEl) totalEl.textContent = formatCurrency(total);
+    if (totalEl) totalEl.textContent = getTotalDisplayText(total, hasCustomPricingPending(cart));
     return total;
 }
 
@@ -592,16 +931,16 @@ function updateCheckoutLink(total) {
     var btn = document.getElementById('checkoutBtn');
     if (!btn) return;
     btn.href = 'checkout.html';
-    btn.classList.toggle('disabled', total === 0);
+    btn.classList.toggle('disabled', cart.length === 0);
 }
 
 function saveCart() {
-    localStorage.setItem('{{PROJECT_NAME}}_cart', JSON.stringify(normalizeCartItems(cart, products.length ? products : normalizeProducts(DEFAULT_PRODUCTS))));
+    localStorage.setItem('sardchocolate_cart', JSON.stringify(normalizeCartItems(cart, products.length ? products : normalizeProducts(DEFAULT_PRODUCTS))));
 }
 
 function setDeliveryMethod(method) {
     deliveryMethod = method;
-    localStorage.setItem('{{PROJECT_NAME}}_delivery_method', method);
+    localStorage.setItem('sardchocolate_delivery_method', method);
     var pickupBtn = document.getElementById('optPickup');
     var deliveryBtn = document.getElementById('optDelivery');
     if (pickupBtn) pickupBtn.classList.toggle('active', method === 'pickup');

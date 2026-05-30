@@ -3,14 +3,14 @@ var DEFAULT_PRODUCTS = [];
 var DEFAULT_DISCOUNTS = [];
 
 var DEFAULT_SITE_SETTINGS = {
-    whatsappNumber: '972569236758',
-    heroSubtitle: '{{HERO_SUBTITLE}}',
-    aboutText: '{{ABOUT_TEXT}}',
-    instagramLink: '{{INSTAGRAM_LINK}}',
+    whatsappNumber: '970595455369',
+    heroSubtitle: 'شوكولاتة فاخرة بتغليف مخصص حسب ذوقك',
+    aboutText: 'سرد شوكولاتة - مصنع شوكولاتة فلسطيني متخصص بصناعة أجود أنواع الشوكولاتة يدوياً.\nنقدم تغليف مخصص وتشكيلات فريدة لكل المناسبات.\nاختاري الألوان والحشوات والأنواع اللي بتحبيها وخلينا نجهزلك أحلى علبة.',
+    instagramLink: 'https://www.instagram.com/sardchocolate.ps/',
     tiktokLink: ''
 };
 
-var BRANDS_DATA = [{{BRANDS_DATA}}];
+var BRANDS_DATA = [{ name: 'شوكولاتة داكنة', logo: 'https://images.unsplash.com/photo-1481391319762-47dff72954d9?w=100&h=100&fit=crop' }, { name: 'شوكولاتة بالحليب', logo: 'https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=100&h=100&fit=crop' }, { name: 'شوكولاتة بيضاء', logo: 'https://images.unsplash.com/photo-1587132137056-bfbf0166836e?w=100&h=100&fit=crop' }, { name: 'تغليف مخصص', logo: 'https://images.unsplash.com/photo-1511381939415-e44015466834?w=100&h=100&fit=crop' }];
 
 function normalizeSizeEntry(entry) {
     if (!entry) return { size: '-', unit: 'cm', price: 0 };
@@ -141,21 +141,82 @@ function getFinalPrice(product, sizeIdx, discounts) {
     };
 }
 
-function normalizeCartItems(cartItems, productsList) {
-    var safeProducts = Array.isArray(productsList) ? productsList : normalizeProducts(DEFAULT_PRODUCTS);
-    return (Array.isArray(cartItems) ? cartItems : []).map(function (item) {
-        var product = safeProducts.find(function (entry) { return entry.id === Number(item.id || item.productId); });
-        var maxSizeIndex = product && product.sizes.length ? product.sizes.length - 1 : 0;
-        var requestedSize = Number.isInteger(item.sizeIdx) ? item.sizeIdx : parseInt(item.sizeIdx || 0, 10) || 0;
-        var sizeIdx = Math.max(0, Math.min(requestedSize, maxSizeIndex));
+function escapeHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function normalizeCustomPackageSet(entry) {
+    return {
+        chocolateType: String(entry && entry.chocolateType ? entry.chocolateType : 'mixed'),
+        filling: String(entry && entry.filling ? entry.filling : 'plain'),
+        qty: Math.max(1, parseInt(entry && entry.qty, 10) || 1)
+    };
+}
+
+function normalizeCustomPackageItem(item) {
+    var sets = Array.isArray(item && item.sets)
+        ? item.sets.map(function (entry) { return normalizeCustomPackageSet(entry); }).filter(function (entry) { return entry.qty > 0; })
+        : [];
+    if (!sets.length) sets = [normalizeCustomPackageSet({})];
+    var delivery = item && item.delivery === 'pickup' ? 'pickup' : 'delivery';
+    return {
+        type: 'custom_package',
+        id: String(item && item.id ? item.id : 'pkg_' + Date.now()),
+        sets: sets,
+        wrapperColor: String(item && item.wrapperColor ? item.wrapperColor : 'gold'),
+        notes: String(item && item.notes ? item.notes : ''),
+        delivery: delivery,
+        customerName: String(item && item.customerName ? item.customerName : ''),
+        customerPhone: String(item && item.customerPhone ? item.customerPhone : ''),
+        customerLocation: delivery === 'delivery' ? String(item && item.customerLocation ? item.customerLocation : '') : '',
+        qty: 1,
+        pricePending: true
+    };
+}
+
+function isCustomPackageItem(item) {
+    return !!(item && item.type === 'custom_package');
+}
+
+function getCustomPackageTitle(item) {
+    var setsCount = Array.isArray(item && item.sets) ? item.sets.length : 0;
+    return 'علبة مخصصة (' + setsCount + ' تشكيلات)';
+}
+
+function hasCustomPricingPending(items) {
+    return (Array.isArray(items) ? items : []).some(function (item) {
+        return isCustomPackageItem(item);
+    });
+}
+
+function getTotalDisplayText(total, hasPending) {
+    var safeTotal = Math.max(0, Number(total) || 0);
+    if (hasPending) {
+        return safeTotal > 0 ? formatCurrency(safeTotal) + ' + سعر العلبة المخصصة يحدد لاحقاً' : 'يحدد بعد تأكيد الإدارة';
+    }
+    return formatCurrency(safeTotal);
+}
+
+function normalizeCartItems(items, products) {
+    return (Array.isArray(items) ? items : []).map(function (item) {
+        if (isCustomPackageItem(item)) return normalizeCustomPackageItem(item);
+        var product = Array.isArray(products) ? products.find(function (entry) { return entry.id === Number(item.id); }) : null;
+        var sizesLength = product && Array.isArray(product.sizes) && product.sizes.length ? product.sizes.length : 1;
+        var safeSizeIdx = Math.max(0, Math.min(sizesLength - 1, parseInt(item.sizeIdx, 10) || 0));
         return {
-            id: Number(item.id || item.productId),
-            sizeIdx: sizeIdx,
-            qty: Math.max(1, parseInt(item.qty || 1, 10) || 1),
-            price: Number(item.price) || (product ? getSizeData(product, sizeIdx).price : 0)
+            id: Number(item.id),
+            sizeIdx: safeSizeIdx,
+            qty: Math.max(1, parseInt(item.qty, 10) || 1),
+            price: Math.max(0, Number(item.price) || 0)
         };
     }).filter(function (item) {
-        return item.id;
+        if (isCustomPackageItem(item)) return !!item.id;
+        return !!item.id;
     });
 }
 

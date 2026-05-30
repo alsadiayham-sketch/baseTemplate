@@ -1,4 +1,4 @@
-(function (global) {
+﻿(function (global) {
     if (typeof firebase === 'undefined') {
         console.error('Firebase SDK failed to load.');
         return;
@@ -19,7 +19,7 @@
     }
 
     var rawDb = firebase.firestore();
-    var PROJECT_ID = '{{PROJECT_NAME}}';
+    var PROJECT_ID = 'sardchocolate';
     var projectRef = rawDb.collection('projects').doc(PROJECT_ID);
 
     var db = {
