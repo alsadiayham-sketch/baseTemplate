@@ -1,18 +1,18 @@
-/* ===== Variables ===== */
+﻿/* ===== Variables ===== */
 :root {
-    --primary: #5C3D2E;
-    --primary-light: #C8A882;
-    --primary-lighter: #FAF3ED;
-    --primary-dark: #3B2316;
-    --accent: #D4A574;
-    --gold: #C9956B;
-    --bg: #FDF9F5;
-    --bg-alt: #F5EDE5;
+    --primary: #1a1a1a;
+    --primary-light: #5BBCC7;
+    --primary-lighter: #E8F4F8;
+    --primary-dark: #0d0d0d;
+    --accent: #2C8C99;
+    --gold: #2C8C99;
+    --bg: #F8FCFD;
+    --bg-alt: #E8F4F8;
     --text: #1a1a1a;
-    --text-light: #6b6b6b;
+    --text-light: #5a5a5a;
     --white: #ffffff;
-    --shadow: 0 4px 20px rgba(60,30,10,0.1);
-    --shadow-hover: 0 8px 30px rgba(60,30,10,0.18);
+    --shadow: 0 4px 20px rgba(44,140,153,0.08);
+    --shadow-hover: 0 8px 30px rgba(44,140,153,0.15);
     --radius: 16px;
     --transition: all 0.3s ease;
 }

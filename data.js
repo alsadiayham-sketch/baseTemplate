@@ -1,16 +1,16 @@
-var DEFAULT_PRODUCTS = [];
+﻿var DEFAULT_PRODUCTS = [];
 
 var DEFAULT_DISCOUNTS = [];
 
 var DEFAULT_SITE_SETTINGS = {
-    whatsappNumber: '970595455369',
-    heroSubtitle: 'شوكولاتة فاخرة بتغليف مخصص حسب ذوقك',
-    aboutText: 'سرد شوكولاتة - مصنع شوكولاتة فلسطيني متخصص بصناعة أجود أنواع الشوكولاتة يدوياً.\nنقدم تغليف مخصص وتشكيلات فريدة لكل المناسبات.\nاختاري الألوان والحشوات والأنواع اللي بتحبيها وخلينا نجهزلك أحلى علبة.',
-    instagramLink: 'https://www.instagram.com/sardchocolate.ps/',
+    whatsappNumber: '970595170026',
+    heroSubtitle: 'منتجات عناية بالبشرة والجسم والشعر بأعلى جودة',
+    aboutText: 'إيناس شوب - مصنع شوكولاتة فلسطيني متخصص بصناعة أجود أنواع الشوكولاتة يدوياً.\nنقدم تغليف مخصص وتشكيلات فريدة لكل المناسبات.\nاختاري الألوان والحشوات والأنواع اللي بتحبيها وخلينا نجهزلك أحلى علبة.',
+    instagramLink: 'https://www.instagram.com/dr_enas_shop/',
     tiktokLink: ''
 };
 
-var BRANDS_DATA = [{ name: 'شوكولاتة داكنة', logo: 'https://images.unsplash.com/photo-1481391319762-47dff72954d9?w=100&h=100&fit=crop' }, { name: 'شوكولاتة بالحليب', logo: 'https://images.unsplash.com/photo-1549007994-cb92caebd54b?w=100&h=100&fit=crop' }, { name: 'شوكولاتة بيضاء', logo: 'https://images.unsplash.com/photo-1587132137056-bfbf0166836e?w=100&h=100&fit=crop' }, { name: 'تغليف مخصص', logo: 'https://images.unsplash.com/photo-1511381939415-e44015466834?w=100&h=100&fit=crop' }];
+var BRANDS_DATA = [{ name: 'AXIS-Y', logo: 'https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=100&h=100&fit=crop' }, { name: 'Beauty of Joseon', logo: 'https://images.unsplash.com/photo-1570194065650-d99fb4ee7cde?w=100&h=100&fit=crop' }, { name: 'I LOVE', logo: 'https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=100&h=100&fit=crop' }, { name: 'Neat', logo: 'https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?w=100&h=100&fit=crop' }, { name: 'VT Cosmetics', logo: 'https://images.unsplash.com/photo-1612817288484-6f916006741a?w=100&h=100&fit=crop' }, { name: 'Hoppa', logo: 'https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=100&h=100&fit=crop' }, { name: 'SESDERMA', logo: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=100&h=100&fit=crop' }, { name: 'BioBalance', logo: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=100&h=100&fit=crop' }];
 
 function normalizeSizeEntry(entry) {
     if (!entry) return { size: '-', unit: 'cm', price: 0 };
