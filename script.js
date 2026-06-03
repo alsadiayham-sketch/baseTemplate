@@ -129,6 +129,12 @@ function subscribeToStoreData() {
         markStoreLoaded('settings');
         setStoreMessage('تعذر تحميل إعدادات المتجر الحالية.', 'warning');
     }));
+
+    // Hero Display slider
+    unsubscribers.push(db.collection('heroDisplay').orderBy('order', 'asc').onSnapshot(function (snapshot) {
+        var slides = snapshot.docs.map(function(doc) { return doc.data(); });
+        renderHeroSlider(slides);
+    }, function() { /* keep static fallback */ }));
 }
 
 function applyFallbackStoreData(message) {
@@ -941,6 +947,74 @@ function setDeliveryMethod(method) {
     var deliveryBtn = document.getElementById('optDelivery');
     if (pickupBtn) pickupBtn.classList.toggle('active', method === 'pickup');
     if (deliveryBtn) deliveryBtn.classList.toggle('active', method === 'delivery');
+}
+
+// ===== Hero Slider =====
+var heroSlideIndex = 0;
+var heroSlideTimer = null;
+
+function renderHeroSlider(slides) {
+    var section = document.getElementById('heroSection');
+    var dotsEl = document.getElementById('heroDots');
+    if (!section || !slides || !slides.length) return;
+
+    var html = slides.map(function(slide, idx) {
+        var media = '';
+        if (slide.type === 'video') {
+            media = '<video src="' + slide.url + '" muted playsinline' + (idx === 0 ? ' autoplay' : '') + ' style="width:100%;height:75vh;object-fit:cover;" onended="goHeroSlide(' + ((idx + 1) % slides.length) + ')"></video>';
+        } else {
+            media = '<img src="' + slide.url + '" alt="' + (slide.title || '') + '" style="width:100%;height:75vh;object-fit:cover;">';
+        }
+        return '<div class="hero-slide' + (idx === 0 ? ' active' : '') + '">' + media +
+            '<div class="hero-overlay"><div class="hero-content">' +
+            (slide.title ? '<h2>' + slide.title + '</h2>' : '') +
+            (slide.subtitle ? '<p>' + slide.subtitle + '</p>' : '') +
+            '<a href="#products" class="btn-primary">تسوقي الآن</a>' +
+            '</div></div></div>';
+    }).join('');
+    section.innerHTML = html;
+
+    // Dots
+    if (dotsEl && slides.length > 1) {
+        dotsEl.innerHTML = slides.map(function(_, idx) {
+            return '<button class="' + (idx === 0 ? 'active' : '') + '" onclick="goHeroSlide(' + idx + ')"></button>';
+        }).join('');
+        section.appendChild(dotsEl);
+        dotsEl.style.display = 'flex';
+    }
+
+    // Auto-advance
+    startHeroSlideTimer();
+}
+
+function goHeroSlide(n) {
+    var section = document.getElementById('heroSection');
+    if (!section) return;
+    var allSlides = section.querySelectorAll('.hero-slide');
+    var allDots = section.querySelectorAll('.hero-dots button');
+    if (!allSlides.length) return;
+    if (allSlides[heroSlideIndex]) allSlides[heroSlideIndex].classList.remove('active');
+    if (allDots[heroSlideIndex]) allDots[heroSlideIndex].classList.remove('active');
+    heroSlideIndex = n;
+    if (allSlides[heroSlideIndex]) allSlides[heroSlideIndex].classList.add('active');
+    if (allDots[heroSlideIndex]) allDots[heroSlideIndex].classList.add('active');
+    var vid = allSlides[heroSlideIndex] ? allSlides[heroSlideIndex].querySelector('video') : null;
+    if (vid) { vid.currentTime = 0; vid.play(); }
+    startHeroSlideTimer();
+}
+
+function startHeroSlideTimer() {
+    if (heroSlideTimer) clearInterval(heroSlideTimer);
+    heroSlideTimer = setInterval(function() {
+        var section = document.getElementById('heroSection');
+        if (!section) return;
+        var allSlides = section.querySelectorAll('.hero-slide');
+        if (allSlides.length <= 1) return;
+        var current = allSlides[heroSlideIndex];
+        if (current && !current.querySelector('video')) {
+            goHeroSlide((heroSlideIndex + 1) % allSlides.length);
+        }
+    }, 5000);
 }
 
 function openPDP(productId) {
