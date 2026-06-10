@@ -1,6 +1,11 @@
-var ADMIN_USER = 'enas';
-var ADMIN_PASS = '5555';
 var FALLBACK_IMAGE = "{{FALLBACK_IMAGE}}";
+
+function hashString(str) {
+    var encoder = new TextEncoder();
+    return crypto.subtle.digest('SHA-256', encoder.encode(str)).then(function (buffer) {
+        return Array.from(new Uint8Array(buffer)).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+    });
+}
 
 var products = [];
 var discounts = [];
@@ -18,10 +23,36 @@ var adminReady = {
 };
 
 document.addEventListener('DOMContentLoaded', function () {
-    if (sessionStorage.getItem('drenasshop_admin') === 'true') {
-        document.getElementById('loginScreen').style.display = 'none';
-        document.getElementById('adminPanel').style.display = 'block';
-        initializeAdmin();
+    var token = sessionStorage.getItem('{{PROJECT_NAME}}_admin');
+    if (token) {
+        if (window.adminRef) {
+            adminRef.get().then(function (docSnap) {
+                if (!docSnap.exists) {
+                    sessionStorage.removeItem('{{PROJECT_NAME}}_admin');
+                    return;
+                }
+                var creds = docSnap.data();
+                var storedVersion = sessionStorage.getItem('{{PROJECT_NAME}}_admin_version');
+                var dbVersion = String(creds.sessionVersion || '1');
+                if (storedVersion !== dbVersion) {
+                    sessionStorage.removeItem('{{PROJECT_NAME}}_admin');
+                    sessionStorage.removeItem('{{PROJECT_NAME}}_admin_version');
+                    location.reload();
+                    return;
+                }
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('adminPanel').style.display = 'block';
+                initializeAdmin();
+            }).catch(function () {
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('adminPanel').style.display = 'block';
+                initializeAdmin();
+            });
+        } else {
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('adminPanel').style.display = 'block';
+            initializeAdmin();
+        }
     }
 });
 
@@ -52,22 +83,60 @@ function setAdminStatus(message, type) {
 
 function handleLogin(event) {
     event.preventDefault();
-    var user = document.getElementById('loginUser').value;
+    var user = document.getElementById('loginUser').value.trim();
     var pass = document.getElementById('loginPass').value;
-    if (user === ADMIN_USER && pass === ADMIN_PASS) {
-        document.getElementById('loginScreen').style.display = 'none';
-        document.getElementById('adminPanel').style.display = 'block';
-        sessionStorage.setItem('drenasshop_admin', 'true');
-        initializeAdmin();
-    } else {
-        document.getElementById('loginError').textContent = 'اسم المستخدم أو كلمة المرور غير صحيحة';
+    var errorEl = document.getElementById('loginError');
+    errorEl.textContent = '';
+
+    if (!window.adminRef) {
+        errorEl.textContent = 'تعذر الاتصال بقاعدة البيانات';
+        return;
     }
+
+    adminRef.get().then(function (docSnap) {
+        if (!docSnap.exists) {
+            errorEl.textContent = 'لم يتم تهيئة بيانات الدخول';
+            return;
+        }
+        var creds = docSnap.data();
+        hashString(pass).then(function (passHash) {
+            if (user === creds.username && passHash === creds.passwordHash) {
+                var sessionToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
+                var dbVersion = String(creds.sessionVersion || '1');
+                sessionStorage.setItem('{{PROJECT_NAME}}_admin', sessionToken);
+                sessionStorage.setItem('{{PROJECT_NAME}}_admin_version', dbVersion);
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('adminPanel').style.display = 'block';
+                initializeAdmin();
+            } else {
+                errorEl.textContent = 'اسم المستخدم أو كلمة المرور غير صحيحة';
+            }
+        });
+    }).catch(function () {
+        errorEl.textContent = 'حدث خطأ أثناء التحقق من البيانات';
+    });
 }
 
 function logout() {
-    sessionStorage.removeItem('drenasshop_admin');
+    sessionStorage.removeItem('{{PROJECT_NAME}}_admin');
+    sessionStorage.removeItem('{{PROJECT_NAME}}_admin_version');
     unsubscribers.forEach(function (unsubscribe) { if (typeof unsubscribe === 'function') unsubscribe(); });
     location.reload();
+}
+
+function killAllSessions() {
+    if (!confirm('سيتم تسجيل خروج جميع المستخدمين بما فيهم أنت. متأكد؟')) return;
+    adminRef.get().then(function (docSnap) {
+        var creds = docSnap.exists ? docSnap.data() : {};
+        var currentVersion = Number(creds.sessionVersion || 1);
+        return adminRef.update({ sessionVersion: currentVersion + 1 });
+    }).then(function () {
+        setAdminStatus('تم إنهاء جميع الجلسات', 'success');
+        setTimeout(function () { logout(); }, 1500);
+    }).catch(function () {
+        setAdminStatus('لإنهاء الجلسات، غيّر قيمة sessionVersion من Firebase Console', 'error');
+    });
+}
 }
 
 function switchTab(tab, button) {

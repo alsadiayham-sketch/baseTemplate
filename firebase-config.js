@@ -19,7 +19,7 @@
     }
 
     var rawDb = firebase.firestore();
-    var PROJECT_ID = 'drenasshop';
+    var PROJECT_ID = '{{PROJECT_NAME}}';
     var projectRef = rawDb.collection('projects').doc(PROJECT_ID);
 
     var db = {
@@ -34,11 +34,18 @@
         }
     };
 
+    // Separate reference for admin auth (outside project scope for security)
+    var adminRef = rawDb.collection('admin_auth').doc(PROJECT_ID);
+
     global.firebaseConfig = firebaseConfig;
     global.db = db;
     global.rawDb = rawDb;
     global.projectRef = projectRef;
     global.PROJECT_ID = PROJECT_ID;
+    // adminRef only accessible on admin page
+    if (document.getElementById('loginScreen')) {
+        global.adminRef = adminRef;
+    }
     global.dimaFirebase = {
         app: firebase.app(),
         db: db,
