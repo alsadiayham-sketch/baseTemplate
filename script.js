@@ -31,9 +31,19 @@ initializeOrderTracking();
     // Fallback if Firestore takes too long
     setTimeout(function () {
         if (!storeLoadState.products || !storeLoadState.discounts || !storeLoadState.settings) {
-            applyFallbackStoreData('');
+            // Only apply fallback if we truly have no data yet
+            if (products.length === 0) {
+                applyFallbackStoreData('');
+            } else {
+                // Products loaded but discounts/settings didn't - force render anyway
+                storeLoadState.products = true;
+                storeLoadState.discounts = true;
+                storeLoadState.settings = true;
+                setLoadingState(false);
+                renderStorefront();
+            }
         }
-    }, 6000);
+    }, 10000);
 });
 
 function setLoadingState(isLoading) {
@@ -85,30 +95,21 @@ function subscribeToStoreData() {
             syncCartWithProducts();
             markStoreLoaded('products');
         }
-        // Now subscribe to all products for real-time updates
-        unsubscribers.push(db.collection('products').onSnapshot(function (fullSnapshot) {
-            products = fullSnapshot.docs.map(function (docSnap) {
-                var d = docSnap.data(); d.id = docSnap.id; return normalizeProduct(d);
-            }).sort(function (a, b) { return a.id - b.id; });
-            syncCartWithProducts();
-            markStoreLoaded('products');
-        }, function () {
-            if (!storeLoadState.products) applyFallbackStoreData('تعذر تحميل المنتجات من فايرستور، تم استخدام البيانات الاحتياطية.');
-            else setStoreMessage('تعذر تحديث المنتجات حالياً.', 'error');
-        }));
     }).catch(function () {
-        // Fallback to full subscription if initial fetch fails
-        unsubscribers.push(db.collection('products').onSnapshot(function (snapshot) {
-            products = snapshot.docs.map(function (docSnap) {
-                var d = docSnap.data(); d.id = docSnap.id; return normalizeProduct(d);
-            }).sort(function (a, b) { return a.id - b.id; });
-            syncCartWithProducts();
-            markStoreLoaded('products');
-        }, function () {
-            if (!storeLoadState.products) applyFallbackStoreData('تعذر تحميل المنتجات من فايرستور، تم استخدام البيانات الاحتياطية.');
-            else setStoreMessage('تعذر تحديث المنتجات حالياً.', 'error');
-        }));
+        // Initial fetch failed, rely on onSnapshot below
     });
+
+    // Subscribe to all products for real-time updates (always runs)
+    unsubscribers.push(db.collection('products').onSnapshot(function (fullSnapshot) {
+        products = fullSnapshot.docs.map(function (docSnap) {
+            var d = docSnap.data(); d.id = docSnap.id; return normalizeProduct(d);
+        }).sort(function (a, b) { return a.id - b.id; });
+        syncCartWithProducts();
+        markStoreLoaded('products');
+    }, function () {
+        if (!storeLoadState.products) applyFallbackStoreData('تعذر تحميل المنتجات من فايرستور، تم استخدام البيانات الاحتياطية.');
+        else setStoreMessage('تعذر تحديث المنتجات حالياً.', 'error');
+    }));
 
     unsubscribers.push(db.collection('discounts').onSnapshot(function (snapshot) {
         discounts = snapshot.docs.map(function (docSnap) {
@@ -767,7 +768,7 @@ function addToCart(event, productId) {
 
     var existing = cart.find(function (item) { return item.id === productId && item.sizeIdx === sizeIdx; });
     if (existing) existing.qty += qty;
-    else cart.push({ id: productId, sizeIdx: sizeIdx, qty: qty, price: pricing.final });
+    else cart.push({ id: productId, sizeIdx: sizeIdx, qty: qty, price: pricing.final, name: product.name, brand: product.brand, image: product.image });
 
     saveCart();
     updateCartBadge();
@@ -1123,7 +1124,7 @@ function addFromPDP() {
     var pricing = getFinalPrice(currentPDPProduct, currentPDPSizeIdx, discounts);
     var existing = cart.find(function (item) { return item.id === currentPDPProduct.id && item.sizeIdx === currentPDPSizeIdx; });
     if (existing) existing.qty += pdpQty;
-    else cart.push({ id: currentPDPProduct.id, sizeIdx: currentPDPSizeIdx, qty: pdpQty, price: pricing.final });
+    else cart.push({ id: currentPDPProduct.id, sizeIdx: currentPDPSizeIdx, qty: pdpQty, price: pricing.final, name: currentPDPProduct.name, brand: currentPDPProduct.brand, image: currentPDPProduct.image });
 
     saveCart();
     updateCartBadge();
