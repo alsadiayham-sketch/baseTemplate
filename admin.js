@@ -137,7 +137,6 @@ function killAllSessions() {
         setAdminStatus('لإنهاء الجلسات، غيّر قيمة sessionVersion من Firebase Console', 'error');
     });
 }
-}
 
 function switchTab(tab, button) {
     document.querySelectorAll('.tab-content').forEach(function (content) { content.classList.remove('active'); });
@@ -757,14 +756,14 @@ function previewImage(input) {
 }
 
 async function uploadProductImage(file, productId) {
-    // Compress and convert to base64 data URL (stored in Firestore directly)
-    return new Promise(function (resolve) {
+    // Upload to ImgBB
+    return new Promise(function (resolve, reject) {
         var reader = new FileReader();
         reader.onload = function (e) {
             var img = new Image();
             img.onload = function () {
                 var canvas = document.createElement('canvas');
-                var maxSize = 400;
+                var maxSize = 600;
                 var w = img.width;
                 var h = img.height;
                 if (w > h) { if (w > maxSize) { h = h * maxSize / w; w = maxSize; } }
@@ -773,8 +772,21 @@ async function uploadProductImage(file, productId) {
                 canvas.height = h;
                 var ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0, w, h);
-                var dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-                resolve(dataUrl);
+                var base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+                var formData = new FormData();
+                formData.append('key', 'de10f7f874d9dbf904fe0cd0ad00332d');
+                formData.append('image', base64);
+                formData.append('name', productId || 'product');
+                fetch('https://api.imgbb.com/1/upload', { method: 'POST', body: formData })
+                    .then(function (res) { return res.json(); })
+                    .then(function (data) {
+                        if (data && data.data && data.data.url) {
+                            resolve(data.data.url);
+                        } else {
+                            reject(new Error('ImgBB upload failed'));
+                        }
+                    })
+                    .catch(function (err) { reject(err); });
             };
             img.src = e.target.result;
         };
