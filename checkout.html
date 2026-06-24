@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enas Shop | إتمام الطلب</title>
+    <title>{{STORE_NAME_EN}} | إتمام الطلب</title>
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <style>
@@ -79,7 +79,7 @@
 <body>
     <nav class="navbar">
         <div class="container nav-container" style="justify-content: space-between;">
-            <a href="index.html" class="logo"><img src="logo.png" alt="Enas Shop" class="logo-img"><span class="logo-text" style="font-size:1rem;">Enas Shop</span></a>
+            <a href="index.html" class="logo"><img src="logo.png" alt="{{STORE_NAME_EN}}" class="logo-img"><span class="logo-text" style="font-size:1rem;">{{STORE_NAME_EN}}</span></a>
             <a href="index.html" style="color: var(--primary-dark); text-decoration: none; font-weight: 600; font-size: 0.95rem; white-space: nowrap; padding: 8px 20px; margin-left: 10px;">← الرئيسية</a>
         </div>
     </nav>
@@ -93,8 +93,6 @@
         </div>
     </div>
 
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
     <script src="firebase-config.js"></script>
     <script src="data.js"></script>
     <script>
@@ -102,17 +100,28 @@
         var products = normalizeProducts(DEFAULT_PRODUCTS);
         var discounts = normalizeDiscounts(DEFAULT_DISCOUNTS);
         var siteSettings = normalizeSettings(DEFAULT_SITE_SETTINGS);
-        var cart = normalizeCartItems(JSON.parse(localStorage.getItem('drenasshop_cart') || '[]'), products);
-        var selectedDelivery = localStorage.getItem('drenasshop_delivery_method') || 'delivery';
+        var cart = normalizeCartItems(JSON.parse(localStorage.getItem('{{PROJECT_NAME}}_cart') || '[]'), products);
+        var selectedDelivery = localStorage.getItem('{{PROJECT_NAME}}_delivery_method') || 'delivery';
         var selectedRegion = '';
+        var orderJustPlaced = false;
 
         var DELIVERY_COSTS = { westbank: 20, jerusalem: 30, inside: 50 };
         var DELIVERY_LABELS = { westbank: 'الضفة', jerusalem: 'القدس', inside: 'الداخل' };
 
         document.addEventListener('DOMContentLoaded', initializeCheckout);
 
+        function goToConfirmationIfDone() {
+            if (!orderJustPlaced) return;
+            var lastOrder = localStorage.getItem('{{PROJECT_NAME}}_last_order');
+            var cartRaw = localStorage.getItem('{{PROJECT_NAME}}_cart') || '[]';
+            var cartEmpty = cartRaw === '[]' || (JSON.parse(cartRaw) || []).length === 0;
+            if (lastOrder && cartEmpty) window.location.href = 'confirmation.html';
+        }
+        document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') goToConfirmationIfDone(); });
+        window.addEventListener('pageshow', function (e) { if (e.persisted) goToConfirmationIfDone(); });
+
         function initializeCheckout() {
-            cart = normalizeCartItems(JSON.parse(localStorage.getItem('drenasshop_cart') || '[]'), products);
+            cart = normalizeCartItems(JSON.parse(localStorage.getItem('{{PROJECT_NAME}}_cart') || '[]'), products);
             saveCart();
             render();
             setStatus('');
@@ -122,7 +131,7 @@
                     if (!snap.empty) {
                         products = snap.docs.map(function (docSnap) { var d = docSnap.data(); d.id = docSnap.id; return normalizeProduct(d); });
                     }
-                    cart = normalizeCartItems(JSON.parse(localStorage.getItem('drenasshop_cart') || '[]'), products);
+                    cart = normalizeCartItems(JSON.parse(localStorage.getItem('{{PROJECT_NAME}}_cart') || '[]'), products);
                     saveCart();
                     render();
                 });
@@ -170,7 +179,11 @@
             var itemsHTML = cart.map(function (item) {
                 if (item.type === 'custom_package') return renderCustomCheckoutItem(item);
                 var product = products.find(function (entry) { return entry.id === item.id; });
-                if (!product) return '';
+                if (!product) {
+                    if (!item.name && !item.image && !item.price) return '';
+                    var fbTotal = (Number(item.price) || 0) * item.qty;
+                    return '<div class="checkout-item"><img src="' + (item.image || FALLBACK_IMAGE) + '" alt="' + escapeHtml(item.name || '') + '"><div class="checkout-item-info"><h4>' + escapeHtml(item.name || 'منتج') + '</h4><span class="item-brand">' + escapeHtml(item.brand || '') + '</span></div><div class="checkout-item-qty"><button onclick="changeQty(\'' + item.id + '\', ' + item.sizeIdx + ', -1)">−</button><span>' + item.qty + '</span><button onclick="changeQty(\'' + item.id + '\', ' + item.sizeIdx + ', 1)">+</button></div><div class="checkout-item-price">' + formatCurrency(fbTotal) + '</div><button class="checkout-item-remove" onclick="removeItem(\'' + item.id + '\', ' + item.sizeIdx + ')">✕</button></div>';
+                }
                 var sizeData = getSizeData(product, item.sizeIdx);
                 var pricing = getFinalPrice(product, item.sizeIdx, discounts);
                 var lineTotal = pricing.final * item.qty;
@@ -228,7 +241,7 @@
             return cart.reduce(function (sum, item) {
                 if (item.type === 'custom_package') return sum;
                 var product = products.find(function (entry) { return entry.id === item.id; });
-                return product ? sum + getFinalPrice(product, item.sizeIdx, discounts).final * item.qty : sum;
+                return product ? sum + getFinalPrice(product, item.sizeIdx, discounts).final * item.qty : sum + (Number(item.price) || 0) * item.qty;
             }, 0);
         }
 
@@ -251,14 +264,14 @@
         }
 
         function saveCart() {
-            localStorage.setItem('drenasshop_cart', JSON.stringify(normalizeCartItems(cart, products)));
+            localStorage.setItem('{{PROJECT_NAME}}_cart', JSON.stringify(normalizeCartItems(cart, products)));
         }
 
         function selectDelivery(method) {
             var formData = getFormValues();
             selectedDelivery = method;
             if (method === 'pickup') selectedRegion = '';
-            localStorage.setItem('drenasshop_delivery_method', method);
+            localStorage.setItem('{{PROJECT_NAME}}_delivery_method', method);
             render();
             restoreFormValues(formData);
         }
@@ -410,7 +423,7 @@
 
         function showOrderSuccess(order) {
             var container = document.getElementById('checkoutContent');
-            var whatsappUrl = buildWhatsAppUrl(siteSettings.whatsappNumber || '970595170026', buildWhatsAppMessage(order));
+            var whatsappUrl = buildWhatsAppUrl(siteSettings.whatsappNumber || '972569236758', buildWhatsAppMessage(order));
             var html = '';
             html += '<div class="checkout-success-card">';
             html += '<h3>تم حفظ طلبك بنجاح</h3>';
@@ -451,10 +464,13 @@
             }
 
             db.collection('orders').doc(order.id).set(order).then(function () {
-                localStorage.setItem('drenasshop_last_order', JSON.stringify(order));
-                localStorage.setItem('drenasshop_cart', '[]');
+                localStorage.setItem('{{PROJECT_NAME}}_last_order', JSON.stringify(order));
+                localStorage.setItem('{{PROJECT_NAME}}_cart', '[]');
                 cart = [];
-                showOrderSuccess(order);
+                orderJustPlaced = true;
+                var whatsappUrl = buildWhatsAppUrl(siteSettings.whatsappNumber || '972569236758', buildWhatsAppMessage(order));
+                setStatus('تم حفظ الطلب. جاري تحويلك إلى واتساب لإرسال الطلب...', 'success');
+                window.location.href = whatsappUrl;
             }).catch(function (error) {
                 console.error(error);
                 alert('تعذر حفظ الطلب حالياً، حاولي مرة أخرى.');

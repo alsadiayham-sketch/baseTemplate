@@ -1,17 +1,18 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enas Shop - لوحة التحكم</title>
-    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <title>{{STORE_NAME_EN}} - لوحة التحكم</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;900&family=El+Messiri:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="admin.css">
 </head>
 <body>
     <div class="login-screen" id="loginScreen">
         <div class="login-card">
-            <h1>لوحة التحكم</h1>
-            <p>إيناس شوب</p>
+            <img src="logo.png" alt="{{STORE_NAME_EN}}" class="login-logo">
+            <h1>{{STORE_NAME_EN}}</h1>
+            <p>لوحة التحكم · {{STORE_NAME_AR}}</p>
             <form onsubmit="handleLogin(event)">
                 <input type="text" id="loginUser" placeholder="اسم المستخدم" required>
                 <input type="password" id="loginPass" placeholder="كلمة المرور" required>
@@ -26,11 +27,14 @@
             <div class="admin-nav-content">
                 <h2>لوحة التحكم</h2>
                 <div class="admin-tabs">
-                    <button class="tab-btn active" onclick="switchTab('dashboard', this)">لوحة المعلومات</button>
-                    <button class="tab-btn" onclick="switchTab('products', this)">المنتجات</button>
-                    <button class="tab-btn" onclick="switchTab('orders', this)">الطلبات</button>
-                    <button class="tab-btn" onclick="switchTab('settings', this)">الإعدادات</button>
+                    <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard', this)">لوحة المعلومات</button>
+                    <button class="tab-btn" data-tab="products" onclick="switchTab('products', this)">المنتجات</button>
+                    <button class="tab-btn" data-tab="orders" onclick="switchTab('orders', this)">الطلبات</button>
+                    <button class="tab-btn" data-tab="hero" onclick="switchTab('hero', this)">الواجهة</button>
+                    <button class="tab-btn" data-tab="settings" onclick="switchTab('settings', this)">الإعدادات</button>
+                    <button class="tab-btn" data-tab="users" onclick="switchTab('users', this)">الموظفون</button>
                 </div>
+                <span id="currentUserLabel" class="current-user-label"></span>
                 <button class="logout-btn" onclick="logout()">خروج</button>
             </div>
         </nav>
@@ -129,9 +133,51 @@
                 <p style="color:#888;font-size:13px;margin-top:8px;">سيتم تسجيل خروج جميع المستخدمين المتصلين حالياً (بما فيهم أنت)</p>
             </div>
         </div>
-    </div>
 
-    <div class="modal-overlay" id="productModal" style="display:none;">
+        <div class="tab-content" id="tab-hero">
+            <div class="tab-header"><h3>إدارة واجهة المتجر (Hero)</h3></div>
+            <p style="color:#888;font-size:13px;margin-bottom:14px;line-height:1.9;">أضيفي صوراً أو فيديوهات تظهر في أعلى المتجر كشرائح متحركة. عند رفع فيديو من جهازك يتم تحويله تلقائياً إلى صورة متحركة (GIF) — حتى الفيديوهات الكبيرة. ويمكنك أيضاً لصق رابط مباشر لصورة أو فيديو.</p>
+            <form class="settings-form" onsubmit="event.preventDefault(); saveHeroSlide(event)">
+                <div class="form-row">
+                    <div class="form-group"><label>رفع صورة أو فيديو</label><input type="file" id="heroFile" accept="image/*,video/*"></div>
+                    <div class="form-group"><label>أو رابط مباشر</label><input type="url" id="heroUrl" placeholder="https://..."></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>عنوان (اختياري)</label><input type="text" id="heroTitle" placeholder="تشكيلة جديدة"></div>
+                    <div class="form-group"><label>الترتيب</label><input type="number" id="heroOrder" value="0" min="0"></div>
+                </div>
+                <button type="submit" class="btn-save" id="heroSaveBtn">إضافة للواجهة</button>
+                <span id="heroUploadStatus" style="margin-inline-start:12px;color:#b8945a;font-weight:600;"></span>
+            </form>
+            <div class="products-table-container" style="margin-top:20px;">
+                <table class="admin-table">
+                    <thead><tr><th>معاينة</th><th>النوع</th><th>العنوان</th><th>الترتيب</th><th></th></tr></thead>
+                    <tbody id="heroTableBody"></tbody>
+                </table>
+            </div>
+        <div class="tab-content" id="tab-users">
+            <div class="tab-header"><h3>إدارة الموظفين</h3></div>
+            <p style="color:#888;font-size:13px;margin-bottom:14px;line-height:1.9;">أضيفي حسابات للموظفين بصلاحيات مختلفة. <strong>مدير</strong>: صلاحية كاملة. <strong>موظف الطلبات</strong>: يرى الطلبات فقط ويحدّث حالتها. كلمات المرور مشفّرة ومحفوظة على الخادم — لا يمكن لأحد قراءتها.</p>
+            <form class="settings-form" onsubmit="saveUser(event)">
+                <div class="form-row">
+                    <div class="form-group"><label>اسم المستخدم</label><input type="text" id="userUsername" required></div>
+                    <div class="form-group"><label>الاسم المعروض</label><input type="text" id="userName"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>الصلاحية</label><select id="userRole"><option value="admin">مدير</option><option value="worker">موظف الطلبات</option></select></div>
+                    <div class="form-group"><label>كلمة المرور</label><input type="password" id="userPassword" placeholder="اتركيها فارغة للإبقاء على الحالية"></div>
+                </div>
+                <button type="submit" class="btn-save">حفظ الموظف</button>
+            </form>
+            <div class="products-table-container" style="margin-top:20px;">
+                <table class="admin-table">
+                    <thead><tr><th>اسم المستخدم</th><th>الاسم</th><th>الصلاحية</th><th>إجراءات</th></tr></thead>
+                    <tbody id="usersTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+        <div class="modal-overlay" id="productModal" style="display:none;">
         <div class="modal">
             <h3 id="productModalTitle">إضافة منتج جديد</h3>
             <form onsubmit="event.preventDefault(); saveProduct(event)">
@@ -147,10 +193,11 @@
                 <div class="form-group"><label>الأحجام والأسعار</label><div id="sizesContainer" class="sizes-container"></div><button type="button" class="btn-add-size" onclick="addSizeRow()">+ إضافة حجم</button></div>
                 <div class="form-group"><label>صورة المنتج</label>
                     <div class="image-upload-group">
-                        <input type="file" id="productImageFile" accept="image/*" onchange="previewImage(this)">
+                        <input type="file" id="productImageFile" accept="image/*,video/*" onchange="previewImage(this)">
                         <span class="upload-or">أو</span>
                         <input type="url" id="productImage" placeholder="رابط الصورة https://...">
                     </div>
+                    <small style="color:#999;display:block;margin-top:6px;">يمكنك رفع صورة أو فيديو (سيُحوَّل الفيديو تلقائياً إلى صورة متحركة GIF) أو لصق رابط مباشر.</small>
                     <div id="imagePreview" class="image-preview"></div>
                 </div>
                 <div class="form-group"><label>الحالة</label><select id="productStatus"><option value="normal">عادي</option><option value="bestseller">الأكثر مبيعاً</option><option value="special">مميز</option><option value="soldout">نفذت الكمية</option></select></div>
@@ -176,8 +223,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
     <script src="firebase-config.js"></script>
     <script src="data.js"></script>
     <script src="seed-data.js"></script>

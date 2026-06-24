@@ -10,6 +10,7 @@ function hashString(str) {
 var products = [];
 var discounts = [];
 var orders = [];
+var heroSlides = [];
 var siteSettings = normalizeSettings(DEFAULT_SITE_SETTINGS);
 var unsubscribers = [];
 var charts = {};
@@ -23,38 +24,22 @@ var adminReady = {
 };
 
 document.addEventListener('DOMContentLoaded', function () {
-    var token = sessionStorage.getItem('{{PROJECT_NAME}}_admin');
-    if (token) {
-        if (window.adminRef) {
-            adminRef.get().then(function (docSnap) {
-                if (!docSnap.exists) {
-                    sessionStorage.removeItem('{{PROJECT_NAME}}_admin');
-                    return;
-                }
-                var creds = docSnap.data();
-                var storedVersion = sessionStorage.getItem('{{PROJECT_NAME}}_admin_version');
-                var dbVersion = String(creds.sessionVersion || '1');
-                if (storedVersion !== dbVersion) {
-                    sessionStorage.removeItem('{{PROJECT_NAME}}_admin');
-                    sessionStorage.removeItem('{{PROJECT_NAME}}_admin_version');
-                    location.reload();
-                    return;
-                }
-                document.getElementById('loginScreen').style.display = 'none';
-                document.getElementById('adminPanel').style.display = 'block';
-                initializeAdmin();
-            }).catch(function () {
-                document.getElementById('loginScreen').style.display = 'none';
-                document.getElementById('adminPanel').style.display = 'block';
-                initializeAdmin();
-            });
-        } else {
-            document.getElementById('loginScreen').style.display = 'none';
-            document.getElementById('adminPanel').style.display = 'block';
+    storeAuth.session().then(function (user) {
+        if (user) {
+            currentUser = user;
+            showAdminPanel();
             initializeAdmin();
         }
-    }
+    });
 });
+
+var currentUser = null;
+
+function showAdminPanel() {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('adminPanel').style.display = 'block';
+    applyRolePermissions();
+}
 
 function setAdminLoading(loading) {
     var loader = document.getElementById('adminLoading');
@@ -88,53 +73,32 @@ function handleLogin(event) {
     var errorEl = document.getElementById('loginError');
     errorEl.textContent = '';
 
-    if (!window.adminRef) {
-        errorEl.textContent = 'تعذر الاتصال بقاعدة البيانات';
-        return;
-    }
-
-    adminRef.get().then(function (docSnap) {
-        if (!docSnap.exists) {
-            errorEl.textContent = 'لم يتم تهيئة بيانات الدخول';
-            return;
+    storeAuth.login(user, pass).then(function (loggedIn) {
+        currentUser = loggedIn;
+        showAdminPanel();
+        initializeAdmin();
+    }).catch(function (err) {
+        if (err && err.status === 401) {
+            errorEl.textContent = 'اسم المستخدم أو كلمة المرور غير صحيحة';
+        } else {
+            errorEl.textContent = 'تعذر تسجيل الدخول، حاولي مرة أخرى';
         }
-        var creds = docSnap.data();
-        hashString(pass).then(function (passHash) {
-            if (user === creds.username && passHash === creds.passwordHash) {
-                var sessionToken = Date.now().toString(36) + Math.random().toString(36).substr(2);
-                var dbVersion = String(creds.sessionVersion || '1');
-                sessionStorage.setItem('{{PROJECT_NAME}}_admin', sessionToken);
-                sessionStorage.setItem('{{PROJECT_NAME}}_admin_version', dbVersion);
-                document.getElementById('loginScreen').style.display = 'none';
-                document.getElementById('adminPanel').style.display = 'block';
-                initializeAdmin();
-            } else {
-                errorEl.textContent = 'اسم المستخدم أو كلمة المرور غير صحيحة';
-            }
-        });
-    }).catch(function () {
-        errorEl.textContent = 'حدث خطأ أثناء التحقق من البيانات';
     });
 }
 
 function logout() {
-    sessionStorage.removeItem('{{PROJECT_NAME}}_admin');
-    sessionStorage.removeItem('{{PROJECT_NAME}}_admin_version');
+    storeAuth.logout();
     unsubscribers.forEach(function (unsubscribe) { if (typeof unsubscribe === 'function') unsubscribe(); });
     location.reload();
 }
 
 function killAllSessions() {
     if (!confirm('سيتم تسجيل خروج جميع المستخدمين بما فيهم أنت. متأكد؟')) return;
-    adminRef.get().then(function (docSnap) {
-        var creds = docSnap.exists ? docSnap.data() : {};
-        var currentVersion = Number(creds.sessionVersion || 1);
-        return adminRef.update({ sessionVersion: currentVersion + 1 });
-    }).then(function () {
+    storeAuth.killAll().then(function () {
         setAdminStatus('تم إنهاء جميع الجلسات', 'success');
         setTimeout(function () { logout(); }, 1500);
     }).catch(function () {
-        setAdminStatus('لإنهاء الجلسات، غيّر قيمة sessionVersion من Firebase Console', 'error');
+        setAdminStatus('تعذر إنهاء الجلسات حالياً', 'error');
     });
 }
 
@@ -142,9 +106,113 @@ function switchTab(tab, button) {
     document.querySelectorAll('.tab-content').forEach(function (content) { content.classList.remove('active'); });
     document.querySelectorAll('.tab-btn').forEach(function (tabButton) { tabButton.classList.remove('active'); });
     document.getElementById('tab-' + tab).classList.add('active');
-    if (button) button.classList.add('active');
+    if (button) {
+        button.classList.add('active');
+    } else {
+        var btn = document.querySelector('.tab-btn[data-tab="' + tab + '"]');
+        if (btn) btn.classList.add('active');
+    }
     if (tab === 'dashboard') renderDashboard();
     if (tab === 'orders') renderOrdersTable();
+    if (tab === 'hero') renderHeroTable();
+    if (tab === 'users') loadUsers();
+}
+
+function applyRolePermissions() {
+    var isWorker = currentUser && currentUser.role === 'worker';
+    var hiddenTabs = ['dashboard', 'products', 'hero', 'settings', 'users'];
+    document.querySelectorAll('.tab-btn').forEach(function (btn) {
+        var tab = btn.getAttribute('data-tab');
+        btn.style.display = (isWorker && hiddenTabs.indexOf(tab) >= 0) ? 'none' : '';
+    });
+    var label = document.getElementById('currentUserLabel');
+    if (label && currentUser) {
+        label.textContent = currentUser.name + ' · ' + (isWorker ? 'موظف الطلبات' : 'مدير');
+    }
+    if (isWorker) switchTab('orders');
+}
+
+var usersList = [];
+
+function loadUsers() {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    storeAuth.listUsers().then(function (list) {
+        usersList = list;
+        renderUsersTable();
+    }).catch(function () {
+        setAdminStatus('تعذر تحميل قائمة الموظفين.', 'error');
+    });
+}
+
+function renderUsersTable() {
+    var tbody = document.getElementById('usersTableBody');
+    if (!tbody) return;
+    var rows = usersList.map(function (u) {
+        var roleLabel = u.role === 'worker' ? 'موظف' : 'مدير';
+        return '<tr><td>' + escapeHtml(u.username) + '</td><td>' + escapeHtml(u.name || '') + '</td><td>' + roleLabel +
+            '</td><td><button class="action-link" onclick="editUser(\'' + escapeHtml(u.username) + '\')">تعديل</button>' +
+            '<button class="action-link" onclick="resetUserPassword(\'' + escapeHtml(u.username) + '\')">إعادة تعيين</button>' +
+            '<button class="action-link" onclick="removeUser(\'' + escapeHtml(u.username) + '\')">حذف</button></td></tr>';
+    });
+    tbody.innerHTML = rows.join('') || '<tr><td colspan="4">لا يوجد موظفون.</td></tr>';
+}
+
+function saveUser(event) {
+    event.preventDefault();
+    if (!currentUser || currentUser.role !== 'admin') return;
+    var username = String(document.getElementById('userUsername').value || '').trim();
+    if (!username) return;
+    var payload = {
+        username: username,
+        name: document.getElementById('userName').value || username,
+        role: document.getElementById('userRole').value === 'worker' ? 'worker' : 'admin',
+        password: document.getElementById('userPassword').value
+    };
+    storeAuth.saveUser(payload).then(function () {
+        document.getElementById('userUsername').value = '';
+        document.getElementById('userName').value = '';
+        document.getElementById('userPassword').value = '';
+        setAdminStatus('تم حفظ الموظف.', 'success');
+        loadUsers();
+    }).catch(function (err) {
+        setAdminStatus((err && err.message) ? err.message : 'تعذر حفظ الموظف.', 'error');
+    });
+}
+
+function editUser(username) {
+    var u = null;
+    for (var i = 0; i < usersList.length; i++) { if (usersList[i].username === username) { u = usersList[i]; break; } }
+    if (!u) return;
+    document.getElementById('userUsername').value = u.username;
+    document.getElementById('userName').value = u.name || '';
+    document.getElementById('userPassword').value = '';
+    document.getElementById('userRole').value = u.role || 'admin';
+}
+
+function removeUser(username) {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    if (username === currentUser.username) { alert('لا يمكنك حذف حسابك الحالي.'); return; }
+    if (!confirm('حذف الموظف ' + username + '؟')) return;
+    storeAuth.deleteUser(username).then(function () {
+        setAdminStatus('تم حذف الموظف.', 'success');
+        loadUsers();
+    }).catch(function (err) {
+        setAdminStatus((err && err.message) ? err.message : 'تعذر حذف الموظف.', 'error');
+    });
+}
+
+function resetUserPassword(username) {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    var u = null;
+    for (var i = 0; i < usersList.length; i++) { if (usersList[i].username === username) { u = usersList[i]; break; } }
+    if (!u) return;
+    var password = prompt('كلمة المرور الجديدة للمستخدم ' + username, '5555');
+    if (password == null) return;
+    storeAuth.saveUser({ username: username, name: u.name, role: u.role, password: String(password || '5555') }).then(function () {
+        setAdminStatus('تم تحديث كلمة المرور.', 'success');
+    }).catch(function () {
+        setAdminStatus('تعذر تحديث كلمة المرور.', 'error');
+    });
 }
 
 async function initializeAdmin() {
@@ -233,6 +301,11 @@ function subscribeToCollections() {
         setAdminStatus('تعذر تحميل الإعدادات.', 'error');
         setAdminLoading(false);
     }));
+
+    unsubscribers.push(db.collection('heroDisplay').orderBy('order', 'asc').onSnapshot(function (snapshot) {
+        heroSlides = snapshot.docs.map(function (docSnap) { var d = docSnap.data(); d.id = docSnap.id; return d; });
+        renderHeroTable();
+    }, function () { /* hero is optional, ignore errors */ }));
 }
 
 function checkAdminReady() {
@@ -401,8 +474,8 @@ async function saveProduct(event) {
     var fileInput = document.getElementById('productImageFile');
     if (fileInput.files && fileInput.files[0]) {
         setAdminLoading(true);
-        setAdminStatus('جاري رفع الصورة...', 'info');
-        imageUrl = await uploadProductImage(fileInput.files[0], nextId);
+        setAdminStatus('جاري معالجة الوسائط...', 'info');
+        imageUrl = await uploadProductMedia(fileInput.files[0], nextId);
     }
 
     var productData = normalizeProduct({
@@ -792,4 +865,162 @@ async function uploadProductImage(file, productId) {
         };
         reader.readAsDataURL(file);
     });
+}
+
+/* ===== Media helpers: video → GIF, blob → ImgBB, unified product media ===== */
+async function uploadProductMedia(file, productId) {
+    if (file && file.type && file.type.indexOf('video') === 0) {
+        setAdminStatus('جاري تحويل الفيديو إلى صورة متحركة (GIF)...', 'info');
+        var gifBlob = await convertVideoToGif(file, function (p) { setAdminStatus('تحويل الفيديو: ' + p + '%', 'info'); });
+        setAdminStatus('جاري رفع الصورة المتحركة...', 'info');
+        return await uploadBlobToImgbb(gifBlob, (productId || 'product') + '_gif');
+    }
+    return await uploadProductImage(file, productId);
+}
+
+function uploadBlobToImgbb(blob, name) {
+    return new Promise(function (resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+            var base64 = String(e.target.result).split(',')[1];
+            var formData = new FormData();
+            formData.append('key', 'de10f7f874d9dbf904fe0cd0ad00332d');
+            formData.append('image', base64);
+            formData.append('name', name || 'media');
+            fetch('https://api.imgbb.com/1/upload', { method: 'POST', body: formData })
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    if (data && data.data && data.data.url) resolve(data.data.url);
+                    else reject(new Error('ImgBB upload failed'));
+                })
+                .catch(reject);
+        };
+        reader.onerror = function () { reject(new Error('تعذر قراءة الملف')); };
+        reader.readAsDataURL(blob);
+    });
+}
+
+// Convert any uploaded video (including big files) to a lightweight animated GIF.
+// Big videos are handled by capping duration (6s), downscaling (max 480px) and frame count (48).
+function convertVideoToGif(file, onProgress) {
+    return new Promise(function (resolve, reject) {
+        if (typeof GIF === 'undefined') { reject(new Error('مكتبة GIF غير محمّلة')); return; }
+        var url = URL.createObjectURL(file);
+        var video = document.createElement('video');
+        video.muted = true;
+        video.preload = 'auto';
+        video.playsInline = true;
+        video.src = url;
+        video.onerror = function () { URL.revokeObjectURL(url); reject(new Error('تعذر قراءة الفيديو')); };
+        video.onloadedmetadata = function () {
+            var maxW = 480;
+            var vw = video.videoWidth || 480;
+            var vh = video.videoHeight || 640;
+            var scale = Math.min(1, maxW / vw);
+            var w = Math.max(2, Math.round(vw * scale));
+            var h = Math.max(2, Math.round(vh * scale));
+            var canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            var ctx = canvas.getContext('2d');
+            var duration = video.duration;
+            if (!isFinite(duration) || duration <= 0) duration = 4;
+            duration = Math.min(duration, 6);
+            var fps = 8;
+            var frameCount = Math.max(4, Math.min(Math.floor(duration * fps), 48));
+            var interval = duration / frameCount;
+            var gif = new GIF({
+                workers: 2,
+                quality: 12,
+                width: w,
+                height: h,
+                repeat: 0,
+                workerScript: 'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js'
+            });
+            gif.on('progress', function (p) { if (onProgress) onProgress(Math.round(50 + p * 50)); });
+            gif.on('finished', function (blob) { URL.revokeObjectURL(url); resolve(blob); });
+            var i = 0;
+            function capture() {
+                if (i >= frameCount) { gif.render(); return; }
+                try { video.currentTime = i * interval; } catch (e) { gif.render(); }
+            }
+            video.onseeked = function () {
+                try {
+                    ctx.drawImage(video, 0, 0, w, h);
+                    gif.addFrame(ctx, { copy: true, delay: Math.round(interval * 1000) });
+                } catch (e) { /* skip frame */ }
+                i++;
+                if (onProgress) onProgress(Math.round((i / frameCount) * 50));
+                capture();
+            };
+            capture();
+        };
+    });
+}
+
+/* ===== Hero (front banner) management ===== */
+function renderHeroTable() {
+    var body = document.getElementById('heroTableBody');
+    if (!body) return;
+    if (!heroSlides.length) {
+        body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;padding:18px;">لا توجد صور واجهة بعد. أضيفي صورة أو فيديو ليظهر في أعلى المتجر.</td></tr>';
+        return;
+    }
+    body.innerHTML = heroSlides.map(function (slide) {
+        var preview = slide.type === 'video'
+            ? '<video src="' + slide.url + '" muted style="width:74px;height:54px;object-fit:cover;border-radius:6px;"></video>'
+            : '<img src="' + slide.url + '" style="width:74px;height:54px;object-fit:cover;border-radius:6px;">';
+        return '<tr><td>' + preview + '</td><td>' + (slide.type === 'video' ? 'فيديو' : 'صورة') + '</td><td>' + (slide.title || '-') + '</td><td>' + (slide.order != null ? slide.order : 0) + '</td><td><button class="btn-danger" style="padding:6px 14px;font-size:13px;" onclick="deleteHeroSlide(\'' + slide.id + '\')">حذف</button></td></tr>';
+    }).join('');
+}
+
+async function saveHeroSlide(event) {
+    event.preventDefault();
+    var fileInput = document.getElementById('heroFile');
+    var url = document.getElementById('heroUrl').value.trim();
+    var title = document.getElementById('heroTitle').value.trim();
+    var order = parseInt(document.getElementById('heroOrder').value || '0', 10) || 0;
+    var type = 'image';
+    var btn = document.getElementById('heroSaveBtn');
+    var statusEl = document.getElementById('heroUploadStatus');
+    try {
+        btn.disabled = true;
+        if (fileInput.files && fileInput.files[0]) {
+            var file = fileInput.files[0];
+            if (file.type && file.type.indexOf('video') === 0) {
+                statusEl.textContent = 'جاري تحويل الفيديو إلى صورة متحركة...';
+                var gifBlob = await convertVideoToGif(file, function (p) { statusEl.textContent = 'تحويل ورفع: ' + p + '%'; });
+                statusEl.textContent = 'جاري رفع الصورة المتحركة...';
+                url = await uploadBlobToImgbb(gifBlob, 'hero_' + Date.now());
+                type = 'image';
+            } else {
+                statusEl.textContent = 'جاري رفع الصورة...';
+                url = await uploadProductImage(file, 'hero_' + Date.now());
+                type = 'image';
+            }
+        } else if (url) {
+            if (/\.(mp4|webm|mov|ogg)(\?|$)/i.test(url)) type = 'video';
+        } else {
+            alert('اختاري ملفاً من جهازك أو أدخلي رابطاً.');
+            btn.disabled = false;
+            return;
+        }
+        var id = 'hero_' + Date.now();
+        await db.collection('heroDisplay').doc(id).set({ url: url, type: type, title: title, order: order });
+        statusEl.textContent = 'تمت الإضافة بنجاح ✓';
+        fileInput.value = '';
+        document.getElementById('heroUrl').value = '';
+        document.getElementById('heroTitle').value = '';
+        setTimeout(function () { statusEl.textContent = ''; }, 2500);
+    } catch (e) {
+        console.error(e);
+        statusEl.textContent = '';
+        alert('حدث خطأ: ' + (e && e.message ? e.message : e));
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function deleteHeroSlide(id) {
+    if (!confirm('حذف هذه الصورة من واجهة المتجر؟')) return;
+    await db.collection('heroDisplay').doc(String(id)).delete();
 }

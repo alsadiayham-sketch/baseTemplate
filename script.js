@@ -4,8 +4,8 @@ var products = [];
 var discounts = [];
 var siteSettings = normalizeSettings(DEFAULT_SITE_SETTINGS);
 var currentFilter = 'all';
-var cart = normalizeCartItems(JSON.parse(localStorage.getItem('drenasshop_cart') || '[]'), normalizeProducts(DEFAULT_PRODUCTS));
-var deliveryMethod = localStorage.getItem('drenasshop_delivery_method') || 'delivery';
+var cart = normalizeCartItems(JSON.parse(localStorage.getItem('{{PROJECT_NAME}}_cart') || '[]'), normalizeProducts(DEFAULT_PRODUCTS));
+var deliveryMethod = localStorage.getItem('{{PROJECT_NAME}}_delivery_method') || 'delivery';
 var currentPDPProduct = null;
 var currentPDPSizeIdx = 0;
 var pdpQty = 1;
@@ -791,42 +791,42 @@ function flyToCart(imgElement, product) {
     var imgRect = imgElement.getBoundingClientRect();
     var cartRect = cartIcon.getBoundingClientRect();
 
-    // Create bubble element
-    var bubble = document.createElement('div');
-    bubble.className = 'cart-bubble';
-    bubble.textContent = product.name;
-    document.body.appendChild(bubble);
+    // Clone the product image as the flying element
+    var flyer = document.createElement('img');
+    flyer.className = 'flying-product';
+    flyer.src = imgElement.currentSrc || imgElement.src || (product && product.image) || '';
+    flyer.style.left = imgRect.left + 'px';
+    flyer.style.top = imgRect.top + 'px';
+    flyer.style.width = imgRect.width + 'px';
+    flyer.style.height = imgRect.height + 'px';
+    document.body.appendChild(flyer);
 
-    // Position at product center
+    // Start and destination centers
     var startX = imgRect.left + imgRect.width / 2;
     var startY = imgRect.top + imgRect.height / 2;
-    bubble.style.left = startX + 'px';
-    bubble.style.top = startY + 'px';
-
-    // Calculate destination (cart icon center)
     var endX = cartRect.left + cartRect.width / 2;
     var endY = cartRect.top + cartRect.height / 2;
     var dx = endX - startX;
     var dy = endY - startY;
 
-    bubble.style.setProperty('--bubble-dx', dx + 'px');
-    bubble.style.setProperty('--bubble-dy', dy + 'px');
+    // Force reflow so the starting position is committed before animating
+    flyer.getBoundingClientRect();
 
-    // Trigger animation
     requestAnimationFrame(function () {
-        bubble.classList.add('animate');
+        flyer.style.transform = 'translate(' + dx + 'px, ' + dy + 'px) scale(0.12)';
+        flyer.style.opacity = '0.2';
     });
 
-    // Cart shake after bubble arrives
+    // Cart shake as the image arrives
     setTimeout(function () {
         cartIcon.classList.add('cart-shake');
         setTimeout(function () { cartIcon.classList.remove('cart-shake'); }, 600);
-    }, 800);
+    }, 750);
 
-    // Clean up bubble
+    // Clean up
     setTimeout(function () {
-        if (bubble.parentNode) bubble.parentNode.removeChild(bubble);
-    }, 1100);
+        if (flyer.parentNode) flyer.parentNode.removeChild(flyer);
+    }, 950);
 }
 
 function changeCardQty(productId, delta) {
@@ -938,12 +938,12 @@ function updateCheckoutLink(total) {
 }
 
 function saveCart() {
-    localStorage.setItem('drenasshop_cart', JSON.stringify(normalizeCartItems(cart, products.length ? products : normalizeProducts(DEFAULT_PRODUCTS))));
+    localStorage.setItem('{{PROJECT_NAME}}_cart', JSON.stringify(normalizeCartItems(cart, products.length ? products : normalizeProducts(DEFAULT_PRODUCTS))));
 }
 
 function setDeliveryMethod(method) {
     deliveryMethod = method;
-    localStorage.setItem('drenasshop_delivery_method', method);
+    localStorage.setItem('{{PROJECT_NAME}}_delivery_method', method);
     var pickupBtn = document.getElementById('optPickup');
     var deliveryBtn = document.getElementById('optDelivery');
     if (pickupBtn) pickupBtn.classList.toggle('active', method === 'pickup');

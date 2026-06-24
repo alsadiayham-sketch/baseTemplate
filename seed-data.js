@@ -1,9 +1,8 @@
-// Seed data for Enas Shop
-// Run via: window.seedFirestoreData(true)
+// Seed data for {{STORE_NAME_EN}}
+// Run via: window.seedFirestoreData(true)  (while logged into the admin so the API token is set)
 
 window.seedFirestoreData = function(clearExisting) {
-    var db = firebase.firestore();
-    var projectRef = db.collection('projects').doc('drenasshop');
+    var db = window.db;
 
     var products = [
         {
@@ -285,14 +284,14 @@ window.seedFirestoreData = function(clearExisting) {
 
     function runSeed() {
         var batch = db.batch();
-        var productsRef = projectRef.collection('products');
-        var settingsRef = projectRef.collection('settings').doc('general');
+        var productsRef = db.collection('products');
+        var settingsRef = db.collection('settings').doc('config');
 
         var settings = {
-            whatsappNumber: '970595170026',
-            heroSubtitle: 'منتجات عناية بالبشرة والجسم والشعر بأعلى جودة',
-            aboutText: 'إيناس شوب - متجر متخصص بمنتجات العناية بالبشرة والجسم والشعر.\nنوفر أفضل الماركات العالمية الأصلية بأسعار منافسة.\nمنتجات كورية، تركية، وعالمية مختارة بعناية من قبل Dr. Enas Lubbadeh.',
-            instagramLink: 'https://www.instagram.com/dr_enas_shop/',
+            whatsappNumber: '972569236758',
+            heroSubtitle: '{{HERO_SUBTITLE}}',
+            aboutText: '{{ABOUT_TEXT}}',
+            instagramLink: '{{INSTAGRAM_LINK}}',
             tiktokLink: ''
         };
 
